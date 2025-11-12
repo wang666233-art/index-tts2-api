@@ -44,7 +44,7 @@ from vllm.v1.engine.async_llm import AsyncLLM
 
 class IndexTTS2:
     def __init__(
-        self, model_dir="checkpoints", is_fp16=False, device=None, use_cuda_kernel=None, gpu_memory_utilization=0.25, qwenemo_gpu_memory_utilization=0.10
+        self, model_dir="checkpoints", is_fp16=False, device=None, use_cuda_kernel=None, gpu_memory_utilization=0.25, qwenemo_gpu_memory_utilization=0.10, enable_qwen_emo=True
     ):
         """
         Args:
@@ -53,6 +53,7 @@ class IndexTTS2:
             is_fp16 (bool): whether to use fp16.
             device (str): device to use (e.g., 'cuda:0', 'cpu'). If None, it will be set automatically based on the availability of CUDA or MPS.
             use_cuda_kernel (None | bool): whether to use BigVGan custom fused activation CUDA kernel, only for CUDA device.
+            enable_qwen_emo (bool): whether to load Qwen emotion model for text-based emotion analysis.
         """
         if device is not None:
             self.device = device
@@ -88,10 +89,17 @@ class IndexTTS2:
         )
         indextts_vllm = AsyncLLM.from_engine_args(engine_args)
 
-        self.qwen_emo = QwenEmotion(
-            os.path.join(self.model_dir, self.cfg.qwen_emo_path),
-            gpu_memory_utilization=qwenemo_gpu_memory_utilization,
-        )
+        # Conditionally load Qwen emotion model
+        self.enable_qwen_emo = enable_qwen_emo
+        if self.enable_qwen_emo:
+            self.qwen_emo = QwenEmotion(
+                os.path.join(self.model_dir, self.cfg.qwen_emo_path),
+                gpu_memory_utilization=qwenemo_gpu_memory_utilization,
+            )
+            logger.info(">> Qwen emotion model loaded")
+        else:
+            self.qwen_emo = None
+            logger.info(">> Qwen emotion model disabled")
 
         self.gpt = UnifiedVoice(indextts_vllm, **self.cfg.gpt)
         self.gpt_path = os.path.join(self.model_dir, self.cfg.gpt_checkpoint)
@@ -244,6 +252,8 @@ class IndexTTS2:
         start_time = time.perf_counter()
 
         if use_emo_text:
+            if not self.enable_qwen_emo:
+                raise ValueError("use_emo_text is True but Qwen emotion model is disabled. Please enable qwen_emo or set use_emo_text=False.")
             emo_audio_prompt = None
             emo_alpha = 1.0
             # assert emo_audio_prompt is None

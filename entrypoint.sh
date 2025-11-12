@@ -8,12 +8,25 @@ MODEL=${MODEL:-"IndexTeam/IndexTTS-1.5"}
 VLLM_USE_MODELSCOPE=${VLLM_USE_MODELSCOPE:-1}
 DOWNLOAD_MODEL=${DOWNLOAD_MODEL:-1}
 CONVERT_MODEL=${CONVERT_MODEL:-1}
+HOST=${HOST:-"0.0.0.0"}
 PORT=${PORT:-8001}
+IS_FP16=${IS_FP16:-0}
+DISABLE_QWEN_EMO=${DISABLE_QWEN_EMO:-0}
+VERBOSE=${VERBOSE:-0}
+GPU_MEMORY_UTILIZATION=${GPU_MEMORY_UTILIZATION:-0.25}
+QWENEMO_GPU_MEMORY_UTILIZATION=${QWENEMO_GPU_MEMORY_UTILIZATION:-0.10}
 
 echo "Starting IndexTTS server..."
 echo "Model directory: $MODEL_DIR"
 echo "Model: $MODEL"
 echo "Use ModelScope: $VLLM_USE_MODELSCOPE"
+echo "Host: $HOST"
+echo "Port: $PORT"
+echo "GPU memory utilization: $GPU_MEMORY_UTILIZATION"
+echo "QwenEmo GPU memory utilization: $QWENEMO_GPU_MEMORY_UTILIZATION"
+echo "FP16: $IS_FP16"
+echo "Disable Qwen emotion: $DISABLE_QWEN_EMO"
+echo "Verbose mode: $VERBOSE"
 
 # Function to check if model directory exists and has required files
 check_model_exists() {
@@ -136,5 +149,26 @@ else
 fi
 
 # Start the API server
-echo "Starting IndexTTS API server on port $PORT..."
-VLLM_USE_V1=0 python3 api_server.py --model_dir "$MODEL_DIR" --port "$PORT" --gpu_memory_utilization="$GPU_MEMORY_UTILIZATION"
+echo "Starting IndexTTS API server on $HOST:$PORT..."
+
+CMD=(python3 api_server_v2.py
+    --host "$HOST"
+    --port "$PORT"
+    --model_dir "$MODEL_DIR"
+    --gpu_memory_utilization "$GPU_MEMORY_UTILIZATION"
+    --qwenemo_gpu_memory_utilization "$QWENEMO_GPU_MEMORY_UTILIZATION"
+)
+
+if [[ "$IS_FP16" == "1" ]]; then
+    CMD+=(--is_fp16)
+fi
+
+if [[ "$DISABLE_QWEN_EMO" == "1" ]]; then
+    CMD+=(--disable_qwen_emo)
+fi
+
+if [[ "$VERBOSE" == "1" ]]; then
+    CMD+=(--verbose)
+fi
+
+exec "${CMD[@]}"

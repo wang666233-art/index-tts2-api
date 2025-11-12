@@ -1,3 +1,4 @@
+# Core TTS dependencies
 vllm==0.10.2
 descript-audiotools==0.7.2
 matplotlib==3.8.2
@@ -9,6 +10,20 @@ ninja
 modelscope
 munch==4.0.0
 loguru
+protobuf>=3.19.0,<3.20.0  # upper-bound to satisfy descript-audiotools
 
+# FastAPI dependencies
+fastapi
+uvicorn[standard]
+python-multipart
+
+# Audio processing
+soundfile
+
+# Platform-specific text processing
 WeTextProcessing; platform_machine != "Darwin"
 wetext; platform_system == "Darwin"
+
+# CUDA support (use torch with CUDA)
+# Install with: pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+# CPU version: pip install torch torchvision torchaudio

@@ -25,6 +25,7 @@ parser.add_argument("--model_dir", type=str, default="checkpoints/IndexTTS-2-vLL
 parser.add_argument("--is_fp16", action="store_true", default=False, help="Fp16 infer")
 parser.add_argument("--gpu_memory_utilization", type=float, default=0.25)
 parser.add_argument("--qwenemo_gpu_memory_utilization", type=float, default=0.10)
+parser.add_argument("--disable_qwen_emo", action="store_true", default=False, help="Disable Qwen emotion model to save GPU memory")
 cmd_args = parser.parse_args()
 
 if not os.path.exists(cmd_args.model_dir):
@@ -157,6 +158,7 @@ if __name__ == "__main__":
         is_fp16=cmd_args.is_fp16,
         gpu_memory_utilization=cmd_args.gpu_memory_utilization,
         qwenemo_gpu_memory_utilization=cmd_args.qwenemo_gpu_memory_utilization,
+        enable_qwen_emo=not cmd_args.disable_qwen_emo,
     )
 
     with gr.Blocks(title="IndexTTS Demo") as demo:
