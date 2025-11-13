@@ -14,21 +14,22 @@ echo -e "${BLUE}=================================================="
 echo -e "IndexTTS API 服务器启动脚本"
 echo -e "==================================================${NC}"
 
-# 检查Python环境
-if ! command -v python &> /dev/null; then
-    echo -e "${RED}错误: Python 未安装${NC}"
+# 检查 uv 是否安装
+if ! command -v uv &> /dev/null; then
+    echo -e "${RED}错误: uv 未安装${NC}"
+    echo -e "${YELLOW}请安装 uv: curl -LsSf https://astral.sh/uv/install.sh | sh${NC}"
     exit 1
 fi
 
 # 检查依赖
 echo -e "${YELLOW}检查依赖...${NC}"
-python -c "import torch, vllm, fastapi" 2>/dev/null || {
-    echo -e "${RED}错误: 依赖未安装，请先运行: python install_api_server.py${NC}"
+uv run python -c "import torch, vllm, fastapi" 2>/dev/null || {
+    echo -e "${RED}错误: 依赖未安装,请先运行: uv sync${NC}"
     exit 1
 }
 
 # 检查CUDA
-python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}')" 2>/dev/null
+uv run python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}')" 2>/dev/null
 
 # 默认参数
 HOST=${HOST:-"0.0.0.0"}
@@ -104,7 +105,7 @@ echo -e "启动 IndexTTS API 服务器..."
 echo -e "==================================================${NC}"
 
 # 启动API服务器
-exec python api_server_v2.py \
+exec uv run python api_server_v2.py \
     --host "$HOST" \
     --port "$PORT" \
     --model_dir "$MODEL_DIR" \
