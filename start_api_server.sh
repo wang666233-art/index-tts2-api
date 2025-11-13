@@ -31,6 +31,20 @@ uv run python -c "import torch, vllm, fastapi" 2>/dev/null || {
 # 检查CUDA
 uv run python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}')" 2>/dev/null
 
+# 配置 CUDA 扩展编译所需的编译器 (GCC <= 12)
+if [[ -z "${CC:-}" || -z "${CXX:-}" || -z "${CUDAHOSTCXX:-}" ]]; then
+    if command -v gcc-12 >/dev/null 2>&1 && command -v g++-12 >/dev/null 2>&1; then
+        export CC="${CC:-$(command -v gcc-12)}"
+        export CXX="${CXX:-$(command -v g++-12)}"
+        export CUDAHOSTCXX="${CUDAHOSTCXX:-$(command -v g++-12)}"
+        echo -e "${GREEN}使用 GCC/G++ 12 作为 CUDA Host 编译器:${NC} $CC / $CXX"
+    else
+        echo -e "${YELLOW}警告: 未找到 gcc-12/g++-12，CUDA 扩展将回退到 PyTorch 实现。如需启用优化，请安装 GCC 12 并重新运行。${NC}"
+    fi
+else
+    echo -e "${GREEN}检测到用户自定义编译器设置 (CC/CXX/CUDAHOSTCXX)，跳过自动配置。${NC}"
+fi
+
 # 默认参数
 HOST=${HOST:-"0.0.0.0"}
 PORT=${PORT:-6006}
