@@ -97,18 +97,33 @@ class TextNormalizer:
             self.zh_normalizer = Normalizer(remove_erhua=False, lang="zh", operator="tn")
             self.en_normalizer = Normalizer(lang="en", operator="tn")
         else:
-            from tn.chinese.normalizer import Normalizer as NormalizerZh
-            from tn.english.normalizer import Normalizer as NormalizerEn
-            # use new cache dir for build tagger rules with disable remove_interjections and remove_erhua
-            cache_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tagger_cache")
-            if not os.path.exists(cache_dir):
-                os.makedirs(cache_dir)
-                with open(os.path.join(cache_dir, ".gitignore"), "w") as f:
-                    f.write("*\n")
-            self.zh_normalizer = NormalizerZh(
-                cache_dir=cache_dir, remove_interjections=False, remove_erhua=False, overwrite_cache=False
-            )
-            self.en_normalizer = NormalizerEn(overwrite_cache=False)
+            zh_ok = False
+            en_ok = False
+            try:
+                from tn.chinese.normalizer import Normalizer as NormalizerZh
+                cache_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tagger_cache")
+                if not os.path.exists(cache_dir):
+                    os.makedirs(cache_dir)
+                    with open(os.path.join(cache_dir, ".gitignore"), "w") as f:
+                        f.write("*\n")
+                self.zh_normalizer = NormalizerZh(
+                    cache_dir=cache_dir, remove_interjections=False, remove_erhua=False, overwrite_cache=False
+                )
+                zh_ok = True
+            except Exception:
+                pass
+            try:
+                from tn.english.normalizer import Normalizer as NormalizerEn
+                self.en_normalizer = NormalizerEn(overwrite_cache=False)
+                en_ok = True
+            except Exception:
+                pass
+            if not zh_ok:
+                from wetext import Normalizer as _WeTextNormalizerZh
+                self.zh_normalizer = _WeTextNormalizerZh(remove_erhua=False, lang="zh", operator="tn")
+            if not en_ok:
+                from wetext import Normalizer as _WeTextNormalizerEn
+                self.en_normalizer = _WeTextNormalizerEn(lang="en", operator="tn")
 
     def normalize(self, text: str) -> str:
         if not self.zh_normalizer or not self.en_normalizer:
