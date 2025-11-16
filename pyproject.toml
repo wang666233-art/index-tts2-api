@@ -1,9 +1,21 @@
 [project]
 name = "index-tts-vllm"
 version = "0.1.0"
-description = "Add your description here"
+description = "IndexTTS-2 Text-to-Speech API Server with vLLM acceleration"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.10"
+authors = [
+    {name = "IndexTTS Team"}
+]
+license = {text = "MIT"}
+keywords = ["tts", "text-to-speech", "vllm", "ai", "speech-synthesis"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+]
 dependencies = [
     "descript-audiotools==0.7.2",
     "gradio>=5.49.1",
@@ -14,7 +26,60 @@ dependencies = [
     "munch==4.0.0",
     "ninja>=1.13.0",
     "omegaconf>=2.3.0",
-    "protobuf>=4.0.0",
     "sentencepiece>=0.2.1",
     "vllm==0.10.2",
+    "fastapi>=0.120.0",
+    "uvicorn>=0.38.0",
+    "WeTextProcessing>=1.0.4; platform_system != 'Darwin'",
+    "wetext>=1.0.4; platform_system == 'Darwin'",
 ]
+
+[project.scripts]
+index-tts-server = "api_server_v2:main"
+
+[project.urls]
+Homepage = "https://github.com/wang666233-art/index-tts2-api"
+Repository = "https://github.com/wang666233-art/index-tts2-api"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["indextts"]
+
+[tool.hatch.build]
+include = [
+    "indextts/**/*.py",
+    "api_server_v2.py",
+    "api_example_v2.py",
+    "patch_vllm.py",
+    "assets/**/*",
+    "README*.md",
+    "LICENSE",
+]
+exclude = [
+    "checkpoints/**",
+    "outputs/**",
+    "logs/**",
+    "__pycache__/**",
+    "*.pyc",
+    ".venv/**",
+    ".git/**",
+]
+
+[tool.uv]
+# 限制环境以避免跨平台依赖冲突
+environments = ["sys_platform == 'linux'"]
+
+# 配置中国镜像源加速下载
+index-url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+extra-index-url = [
+    "https://mirrors.aliyun.com/pypi/simple/",
+    "https://pypi.mirrors.ustc.edu.cn/simple/",
+]
+
+# 依赖冲突解决策略
+resolution = "highest"
+
+[tool.uv.sources]

@@ -14,21 +14,53 @@ echo -e "${BLUE}=================================================="
 echo -e "IndexTTS API 服务器启动脚本"
 echo -e "==================================================${NC}"
 
-# 检查Python环境
-if ! command -v python &> /dev/null; then
-    echo -e "${RED}错误: Python 未安装${NC}"
+# 检查 uv 环境
+if ! command -v uv &> /dev/null; then
+    echo -e "${RED}错误: 未安装 uv，请参考 https://docs.astral.sh/uv/ 进行安装${NC}"
+    exit 1
+fi
+
+# 同步依赖
+echo -e "${YELLOW}同步依赖...${NC}"
+if ! uv sync --frozen; then
+    echo -e "${RED}错误: uv 同步依赖失败，请检查 pyproject.toml 与 uv.lock${NC}"
     exit 1
 fi
 
 # 检查依赖
 echo -e "${YELLOW}检查依赖...${NC}"
-python -c "import torch, vllm, fastapi" 2>/dev/null || {
-    echo -e "${RED}错误: 依赖未安装，请先运行: python install_api_server.py${NC}"
+uv run -- python -c "import torch, vllm, fastapi" 2>/dev/null || {
+    echo -e "${RED}错误: 依赖检查失败，请运行: uv sync${NC}"
     exit 1
 }
 
 # 检查CUDA
-python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}')" 2>/dev/null
+uv run -- python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}')" 2>/dev/null
+
+# 自动检测 CUDA Compute Capability 以加速自定义算子编译
+if [[ -z "${TORCH_CUDA_ARCH_LIST:-}" ]]; then
+    echo -e "${YELLOW}检测 GPU 架构以设置 TORCH_CUDA_ARCH_LIST...${NC}"
+    if CUDA_ARCH=$(uv run -- python - <<'PY'
+import sys
+try:
+    import torch
+except Exception:
+    sys.exit(2)
+
+if not torch.cuda.is_available():
+    sys.exit(3)
+
+major, minor = torch.cuda.get_device_capability(0)
+print(f"{major}.{minor}")
+PY
+    ); then
+        CUDA_ARCH=${CUDA_ARCH//$'\r'/}
+        export TORCH_CUDA_ARCH_LIST="${CUDA_ARCH}"
+        echo -e "${GREEN}已设置 TORCH_CUDA_ARCH_LIST=${TORCH_CUDA_ARCH_LIST}${NC}"
+    else
+        echo -e "${YELLOW}未能自动检测 GPU 架构，可手动设置 TORCH_CUDA_ARCH_LIST 以优化编译时间。${NC}"
+    fi
+fi
 
 # 默认参数
 HOST=${HOST:-"0.0.0.0"}
@@ -104,7 +136,7 @@ echo -e "启动 IndexTTS API 服务器..."
 echo -e "==================================================${NC}"
 
 # 启动API服务器
-exec python api_server_v2.py \
+exec uv run -- python api_server_v2.py \
     --host "$HOST" \
     --port "$PORT" \
     --model_dir "$MODEL_DIR" \
