@@ -32,6 +32,7 @@ dependencies = [
     "uvicorn>=0.38.0",
     "WeTextProcessing>=1.0.4; platform_system != 'Darwin'",
     "wetext>=1.0.4; platform_system == 'Darwin'",
+    "flash-attn>=2.8.3",
 ]
 
 [project.scripts]
