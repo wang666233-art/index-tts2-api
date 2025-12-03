@@ -25,5 +25,7 @@ COPY api_server.py /app/api_server.py
 COPY convert_hf_format.py /app/convert_hf_format.py
 COPY convert_hf_format.sh /app/convert_hf_format.sh
 COPY entrypoint.sh /app/entrypoint.sh
+# Include pre-downloaded model checkpoints (ensure you have ./checkpoints in build context)
+COPY checkpoints /app/checkpoints
 
 ENTRYPOINT /app/entrypoint.sh

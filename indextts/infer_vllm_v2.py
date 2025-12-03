@@ -107,10 +107,8 @@ class IndexTTS2:
         self.gpt_path = os.path.join(self.model_dir, self.cfg.gpt_checkpoint)
         load_checkpoint(self.gpt, self.gpt_path)
         self.gpt = self.gpt.to(self.device)
-        # if self.is_fp16:
-        #     self.gpt.eval().half()
-        # else:
-        #     self.gpt.eval()
+        if self.is_fp16:
+            self.gpt.half()
         self.gpt.eval()
         logger.info(f">> GPT weights restored from: {self.gpt_path}")
 
@@ -135,6 +133,8 @@ class IndexTTS2:
             os.path.join(self.model_dir, "w2v-bert-2.0")
         )
         self.semantic_model = self.semantic_model.to(self.device)
+        if self.is_fp16:
+            self.semantic_model.half()
         self.semantic_model.eval()
         self.semantic_mean = self.semantic_mean.to(self.device)
         self.semantic_std = self.semantic_std.to(self.device)
@@ -143,6 +143,8 @@ class IndexTTS2:
         semantic_code_ckpt = os.path.join(self.model_dir, "semantic_codec/model.safetensors")
         safetensors.torch.load_model(semantic_codec, semantic_code_ckpt)
         self.semantic_codec = semantic_codec.to(self.device)
+        if self.is_fp16:
+            self.semantic_codec.half()
         self.semantic_codec.eval()
         logger.info('>> semantic_codec weights restored from: {}'.format(semantic_code_ckpt))
 
@@ -157,6 +159,8 @@ class IndexTTS2:
             is_distributed=False,
         )
         self.s2mel = s2mel.to(self.device)
+        if self.is_fp16:
+            self.s2mel.half()
         self.s2mel.models['cfm'].estimator.setup_caches(max_batch_size=1, max_seq_length=8192)
         self.s2mel.eval()
         logger.info(f">> s2mel weights restored from: {s2mel_path}")
@@ -169,6 +173,8 @@ class IndexTTS2:
         campplus_model = CAMPPlus(feat_dim=80, embedding_size=192)
         campplus_model.load_state_dict(torch.load(campplus_ckpt_path, map_location="cpu"))
         self.campplus_model = campplus_model.to(self.device)
+        if self.is_fp16:
+            self.campplus_model.half()
         self.campplus_model.eval()
         logger.info(f">> campplus_model weights restored from: {campplus_ckpt_path}")
 
@@ -176,6 +182,8 @@ class IndexTTS2:
         # self.bigvgan = bigvgan.BigVGAN.from_pretrained(bigvgan_name, use_cuda_kernel=False, cache_dir=os.path.join(self.model_dir, "bigvgan"))
         self.bigvgan = bigvgan.BigVGAN.from_pretrained(os.path.join(self.model_dir, "bigvgan"))
         self.bigvgan = self.bigvgan.to(self.device)
+        if self.is_fp16:
+            self.bigvgan.half()
         self.bigvgan.remove_weight_norm()
         self.bigvgan.eval()
         logger.info(f">> bigvgan weights restored from: {bigvgan_name}")
