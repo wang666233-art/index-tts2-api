@@ -3,7 +3,6 @@ name = "index-tts-vllm"
 version = "0.1.0"
 description = "IndexTTS-2 Text-to-Speech API Server with vLLM acceleration"
 readme = "README.md"
-<<<<<<< HEAD
 requires-python = ">=3.10"
 authors = [
     {name = "IndexTTS Team"}
@@ -17,9 +16,6 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
 ]
-=======
-requires-python = ">=3.13,<3.14"
->>>>>>> 49a74584cb63df32df3be1860f6603736c770b4f
 dependencies = [
     "descript-audiotools==0.7.2",
     "gradio>=5.49.1",
@@ -30,10 +26,6 @@ dependencies = [
     "munch==4.0.0",
     "ninja>=1.13.0",
     "omegaconf>=2.3.0",
-<<<<<<< HEAD
-=======
-    "protobuf>=3.19.0,<3.20.0",
->>>>>>> 49a74584cb63df32df3be1860f6603736c770b4f
     "sentencepiece>=0.2.1",
     "vllm==0.10.2",
     "fastapi>=0.120.0",
