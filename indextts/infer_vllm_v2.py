@@ -46,7 +46,7 @@ from vllm.v1.engine.async_llm import AsyncLLM
 
 class IndexTTS2:
     def __init__(
-        self, model_dir="checkpoints", is_fp16=False, device=None, use_cuda_kernel=None, gpu_memory_utilization=0.15, qwenemo_gpu_memory_utilization=0.10, enable_qwen_emo=True
+        self, model_dir="checkpoints", is_fp16=False, device=None, use_cuda_kernel=None, gpu_memory_utilization=0.15, qwenemo_gpu_memory_utilization=0.90, enable_qwen_emo=True
     ):
         """
         Args:
@@ -108,6 +108,7 @@ class IndexTTS2:
         load_checkpoint(self.gpt, self.gpt_path)
         self.gpt = self.gpt.to(self.device)
         if self.is_fp16:
+            # GPT 使用 FP16，通过 autocast 处理 LayerNorm 兼容性
             self.gpt.half()
         self.gpt.eval()
         logger.info(f">> GPT weights restored from: {self.gpt_path}")
@@ -138,6 +139,10 @@ class IndexTTS2:
         self.semantic_model.eval()
         self.semantic_mean = self.semantic_mean.to(self.device)
         self.semantic_std = self.semantic_std.to(self.device)
+        # FP16 模式下 mean/std 也需要转换，否则计算结果会变成 FP32
+        if self.is_fp16:
+            self.semantic_mean = self.semantic_mean.half()
+            self.semantic_std = self.semantic_std.half()
 
         semantic_codec = build_semantic_codec(self.cfg.semantic_codec)
         semantic_code_ckpt = os.path.join(self.model_dir, "semantic_codec/model.safetensors")
@@ -160,7 +165,7 @@ class IndexTTS2:
         )
         self.s2mel = s2mel.to(self.device)
         if self.is_fp16:
-            self.s2mel.half()
+            self.s2mel.half()  # 方案 B: CFM TimestepEmbedder 已修复，支持 FP16
         self.s2mel.models['cfm'].estimator.setup_caches(max_batch_size=1, max_seq_length=8192)
         self.s2mel.eval()
         logger.info(f">> s2mel weights restored from: {s2mel_path}")
@@ -201,6 +206,11 @@ class IndexTTS2:
 
         spk_matrix = torch.load(os.path.join(self.model_dir, self.cfg.spk_matrix))
         self.spk_matrix = spk_matrix.to(self.device)
+        
+        # FP16 模式下 emo_matrix/spk_matrix 需要转换（用于与 style 计算）
+        if self.is_fp16:
+            self.emo_matrix = self.emo_matrix.half()
+            self.spk_matrix = self.spk_matrix.half()
 
         self.emo_matrix = torch.split(self.emo_matrix, self.emo_num)
         self.spk_matrix = torch.split(self.spk_matrix, self.emo_num)
@@ -258,15 +268,19 @@ class IndexTTS2:
         audio_22k = torchaudio.transforms.Resample(sr, 22050)(audio)
         audio_16k = torchaudio.transforms.Resample(sr, 16000)(audio)
 
+        # semantic_model 输入需要匹配模型精度
         inputs = self.extract_features(audio_16k, sampling_rate=16000, return_tensors="pt")
         input_features = inputs["input_features"].to(self.device)
         attention_mask = inputs["attention_mask"].to(self.device)
-        spk_cond_emb = self.get_emb(input_features, attention_mask)
+        if self.is_fp16:
+            input_features = input_features.half()
+        spk_cond_emb = self.get_emb(input_features, attention_mask)  # FP16 if is_fp16
 
-        _, S_ref = self.semantic_codec.quantize(spk_cond_emb)
+        _, S_ref = self.semantic_codec.quantize(spk_cond_emb)  # FP16 if is_fp16
         ref_mel = self.mel_fn(audio_22k.to(spk_cond_emb.device).float())
         ref_target_lengths = torch.LongTensor([ref_mel.size(2)]).to(ref_mel.device)
         
+        # campplus 输入需要匹配模型精度
         feat = torchaudio.compliance.kaldi.fbank(
             audio_16k.to(ref_mel.device),
             num_mel_bins=80,
@@ -274,10 +288,13 @@ class IndexTTS2:
             sample_frequency=16000
         )
         feat = feat - feat.mean(dim=0, keepdim=True)
-        style = self.campplus_model(feat.unsqueeze(0))
+        if self.is_fp16:
+            feat = feat.half()
+        style = self.campplus_model(feat.unsqueeze(0))  # FP16 if is_fp16
 
+        # s2mel 现在支持 FP16（方案 B），输入类型与模型匹配
         prompt_condition = self.s2mel.models['length_regulator'](
-            S_ref,
+            S_ref,  # FP16 if is_fp16
             ylens=ref_target_lengths,
             n_quantizers=3,
             f0=None
@@ -299,7 +316,10 @@ class IndexTTS2:
         emo_inputs = self.extract_features(emo_audio, sampling_rate=16000, return_tensors="pt")
         emo_input_features = emo_inputs["input_features"].to(self.device)
         emo_attention_mask = emo_inputs["attention_mask"].to(self.device)
-        emo_cond_emb = self.get_emb(emo_input_features, emo_attention_mask)
+        # semantic_model 输入需要匹配模型精度
+        if self.is_fp16:
+            emo_input_features = emo_input_features.half()
+        emo_cond_emb = self.get_emb(emo_input_features, emo_attention_mask)  # FP16 if is_fp16
         return {"emo_cond_emb": emo_cond_emb}
 
     def get_speaker_features(self, audio_path: str):
@@ -363,49 +383,55 @@ class IndexTTS2:
         """
         timings = {"gpt_forward": 0, "s2mel": 0, "bigvgan": 0}
         
-        # GPT forward
+        # GPT forward - 使用 autocast 处理 FP16/FP32 混合精度
         m_start = time.perf_counter()
         use_speed = torch.zeros(spk_cond_emb.size(0)).to(spk_cond_emb.device).long()
-        latent = self.gpt(
-            speech_conditioning_latent,
-            text_tokens,
-            torch.tensor([text_tokens.shape[-1]], device=text_tokens.device),
-            codes,
-            torch.tensor([codes.shape[-1]], device=text_tokens.device),
-            emo_cond_emb,
-            cond_mel_lengths=torch.tensor([spk_cond_emb.shape[-1]], device=text_tokens.device),
-            emo_cond_mel_lengths=torch.tensor([emo_cond_emb.shape[-1]], device=text_tokens.device),
-            emo_vec=emovec,
-            use_speed=use_speed,
-        )
+        with torch.amp.autocast('cuda', enabled=self.is_fp16):
+            latent = self.gpt(
+                speech_conditioning_latent,
+                text_tokens,
+                torch.tensor([text_tokens.shape[-1]], device=text_tokens.device),
+                codes,
+                torch.tensor([codes.shape[-1]], device=text_tokens.device),
+                emo_cond_emb,
+                cond_mel_lengths=torch.tensor([spk_cond_emb.shape[-1]], device=text_tokens.device),
+                emo_cond_mel_lengths=torch.tensor([emo_cond_emb.shape[-1]], device=text_tokens.device),
+                emo_vec=emovec,
+                use_speed=use_speed,
+            )
         timings["gpt_forward"] = time.perf_counter() - m_start
 
-        # s2mel (CFM diffusion)
+        # s2mel (CFM diffusion) - s2mel 支持 FP16
         m_start = time.perf_counter()
         diffusion_steps = 25
         inference_cfg_rate = 0.7
+        # latent 来自 autocast (可能是 FP32)，需要转换为 s2mel 的精度
+        if self.is_fp16:
+            latent = latent.half()
         latent = self.s2mel.models['gpt_layer'](latent)
         S_infer = self.semantic_codec.quantizer.vq2emb(codes.unsqueeze(1))
-        S_infer = S_infer.transpose(1, 2)
+        S_infer = S_infer.transpose(1, 2)  # 保持原有类型 (FP16 if is_fp16)
         S_infer = S_infer + latent
         target_lengths = (code_lens * 1.72).long()
 
         cond = self.s2mel.models['length_regulator'](
             S_infer, ylens=target_lengths, n_quantizers=3, f0=None
         )[0]
+        # ref_mel 是 FP32，需要转换
+        ref_mel_input = ref_mel.half() if self.is_fp16 else ref_mel
         cat_condition = torch.cat([prompt_condition, cond], dim=1)
         vc_target = self.s2mel.models['cfm'].inference(
             cat_condition,
             torch.LongTensor([cat_condition.size(1)]).to(cond.device),
-            ref_mel, style, None, diffusion_steps,
+            ref_mel_input, style, None, diffusion_steps,
             inference_cfg_rate=inference_cfg_rate
         )
         vc_target = vc_target[:, :, ref_mel.size(-1):]
         timings["s2mel"] = time.perf_counter() - m_start
 
-        # bigvgan
+        # bigvgan - 输入已经是正确的类型
         m_start = time.perf_counter()
-        wav = self.bigvgan(vc_target.float()).squeeze().unsqueeze(0)
+        wav = self.bigvgan(vc_target).squeeze().unsqueeze(0)
         wav = wav.squeeze(1)
         wav = torch.clamp(32767 * wav, -32767.0, 32767.0)
         timings["bigvgan"] = time.perf_counter() - m_start
@@ -455,7 +481,7 @@ class IndexTTS2:
             if verbose:
                 print(f"[Pipeline] 句子 {idx+1}/{len(sentences)}: GPT 生成中...")
 
-            # GPT 生成
+            # GPT 生成 - inference_speech 不使用 transformers GPT2Model
             m_start_time = time.perf_counter()
             with torch.no_grad():
                 codes, speech_conditioning_latent = await self.gpt.inference_speech(
@@ -618,8 +644,8 @@ class IndexTTS2:
         s2mel_time = 0
         bigvgan_time = 0
 
-        # 预计算 emovec（所有句子共用）
-        with torch.no_grad():
+        # 预计算 emovec（所有句子共用）- 使用 autocast
+        with torch.no_grad(), torch.amp.autocast('cuda', enabled=self.is_fp16):
             emovec = self.gpt.merge_emovec(
                 spk_cond_emb,
                 emo_cond_emb,
@@ -654,6 +680,7 @@ class IndexTTS2:
 
                 m_start_time = time.perf_counter()
                 with torch.no_grad():
+                    # GPT - inference_speech 不使用 transformers GPT2Model
                     codes, speech_conditioning_latent = await self.gpt.inference_speech(
                         spk_cond_emb,
                         text_tokens,
@@ -740,21 +767,14 @@ class QwenEmotion:
         self.model_dir = model_dir
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_dir)
 
-        # self.model = AutoModelForCausalLM.from_pretrained(
-        #     self.model_dir,
-        #     torch_dtype="float16",  # "auto"
-        #     # device_map="auto"
-        # )
-        # self.model = self.model.to("cuda")
-
-        engine_args = AsyncEngineArgs(
-            model=model_dir,
-            tensor_parallel_size=1,
-            dtype="auto",
-            gpu_memory_utilization=gpu_memory_utilization,
-            max_model_len=2048,
+        # 使用 transformers 直接加载，避免 vLLM 的 KV cache 显存问题
+        self.model = AutoModelForCausalLM.from_pretrained(
+            self.model_dir,
+            torch_dtype=torch.float16,
         )
-        self.model = AsyncLLM.from_engine_args(engine_args)
+        self.model = self.model.to("cuda")
+        self.model.eval()
+        self.use_vllm = False  # 标记使用 transformers 而非 vLLM
 
         self.prompt = "文本情感分类"
         self.convert_dict = {
@@ -824,26 +844,17 @@ class QwenEmotion:
             add_generation_prompt=True,
             enable_thinking=False,
         )
-        model_inputs = self.tokenizer(text)["input_ids"]
-        # model_inputs = self.tokenizer([text], return_tensors="pt").to(self.model.device)
-
-        # conduct text completion
-        # generated_ids = self.model.generate(
-        #     **model_inputs,
-        #     max_new_tokens=32768,
-        #     pad_token_id=self.tokenizer.eos_token_id
-        # )
-        # output_ids = generated_ids[0][len(model_inputs.input_ids[0]):].tolist()
-
         
-        sampling_params = SamplingParams(
-            max_tokens=2048,  # 32768
-        )
-        tokens_prompt = TokensPrompt(prompt_token_ids=model_inputs)
-        output_generator = self.model.generate(tokens_prompt, sampling_params=sampling_params, request_id=uuid.uuid4().hex)
-        async for output in output_generator:
-            pass
-        output_ids = output.outputs[0].token_ids[:-2]
+        # 使用 transformers 进行推理
+        model_inputs = self.tokenizer([text], return_tensors="pt").to(self.model.device)
+        
+        with torch.no_grad():
+            generated_ids = self.model.generate(
+                **model_inputs,
+                max_new_tokens=256,  # 情感分析输出很短
+                pad_token_id=self.tokenizer.eos_token_id
+            )
+        output_ids = generated_ids[0][len(model_inputs.input_ids[0]):].tolist()
 
         # parsing thinking content
         try:

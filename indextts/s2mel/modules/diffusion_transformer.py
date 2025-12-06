@@ -47,8 +47,8 @@ class TimestepEmbedder(nn.Module):
         :return: an (N, D) Tensor of positional embeddings.
         """
         # https://github.com/openai/glide-text2im/blob/main/glide_text2im/nn.py
-
-        args = self.scale * t[:, None].float() * self.freqs[None]
+        # 使用 freqs 的 dtype，支持 FP16
+        args = self.scale * t[:, None].to(self.freqs.dtype) * self.freqs[None]
         embedding = torch.cat([torch.cos(args), torch.sin(args)], dim=-1)
         if self.frequency_embedding_size % 2:
             embedding = torch.cat([embedding, torch.zeros_like(embedding[:, :1])], dim=-1)
