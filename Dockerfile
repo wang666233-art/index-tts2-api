@@ -3,11 +3,13 @@ FROM vllm/vllm-openai:v0.9.0
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
+    curl \
     ffmpeg \
     build-essential \
     libsndfile1 \
     libsm6 \
     libxext6 \
+    wget \
     && \
     rm -rf /var/lib/apt/lists/* && \
     ln -sf /usr/bin/python3 /usr/bin/python
@@ -25,7 +27,7 @@ COPY api_server.py /app/api_server.py
 COPY convert_hf_format.py /app/convert_hf_format.py
 COPY convert_hf_format.sh /app/convert_hf_format.sh
 COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh /app/convert_hf_format.sh
 # Include pre-downloaded model checkpoints (ensure you have ./checkpoints in build context)
-COPY checkpoints /app/checkpoints
 
 ENTRYPOINT /app/entrypoint.sh

@@ -10,11 +10,36 @@ DOWNLOAD_MODEL=${DOWNLOAD_MODEL:-1}
 CONVERT_MODEL=${CONVERT_MODEL:-1}
 HOST=${HOST:-"0.0.0.0"}
 PORT=${PORT:-8001}
-IS_FP16=${IS_FP16:-0}
+IS_FP16=${IS_FP16:-2}
+ENABLE_QWEN_EMO=${ENABLE_QWEN_EMO:-""}
 DISABLE_QWEN_EMO=${DISABLE_QWEN_EMO:-0}
-VERBOSE=${VERBOSE:-0}
+VERBOSE=${VERBOSE:-2}
 GPU_MEMORY_UTILIZATION=${GPU_MEMORY_UTILIZATION:-0.25}
 QWENEMO_GPU_MEMORY_UTILIZATION=${QWENEMO_GPU_MEMORY_UTILIZATION:-0.10}
+
+normalize_switch() {
+    case "$1" in
+        1) echo 1 ;;
+        2|0|"") echo 2 ;;
+        *) echo 2 ;;
+    esac
+}
+
+# Switch normalization: 1=enable, 2=disable
+IS_FP16=$(normalize_switch "$IS_FP16")
+VERBOSE=$(normalize_switch "$VERBOSE")
+DOWNLOAD_MODEL=$(normalize_switch "$DOWNLOAD_MODEL")
+CONVERT_MODEL=$(normalize_switch "$CONVERT_MODEL")
+
+if [[ -z "${ENABLE_QWEN_EMO}" ]]; then
+    if [[ "${DISABLE_QWEN_EMO}" == "1" || "${DISABLE_QWEN_EMO}" == "2" ]]; then
+        ENABLE_QWEN_EMO_EFFECTIVE=2
+    else
+        ENABLE_QWEN_EMO_EFFECTIVE=1
+    fi
+else
+    ENABLE_QWEN_EMO_EFFECTIVE=$(normalize_switch "${ENABLE_QWEN_EMO}")
+fi
 
 echo "Starting IndexTTS server..."
 echo "Model directory: $MODEL_DIR"
@@ -24,9 +49,9 @@ echo "Host: $HOST"
 echo "Port: $PORT"
 echo "GPU memory utilization: $GPU_MEMORY_UTILIZATION"
 echo "QwenEmo GPU memory utilization: $QWENEMO_GPU_MEMORY_UTILIZATION"
-echo "FP16: $IS_FP16"
-echo "Disable Qwen emotion: $DISABLE_QWEN_EMO"
-echo "Verbose mode: $VERBOSE"
+echo "FP16 (1=enable,2=disable): $IS_FP16"
+echo "Qwen emotion (1=enable,2=disable): $ENABLE_QWEN_EMO_EFFECTIVE"
+echo "Verbose (1=enable,2=disable): $VERBOSE"
 
 # Function to check if model directory exists and has required files
 check_model_exists() {
@@ -34,17 +59,16 @@ check_model_exists() {
         echo "Model directory $MODEL_DIR does not exist"
         return 1
     fi
-    
-    # Check for download completion marker
-    if [ ! -f "$MODEL_DIR/.download_complete" ]; then
-        echo "Model download not completed (marker file missing)"
-        return 1
-    fi
-    
+
     # Check for essential model files
     if [ ! -f "$MODEL_DIR/config.yaml" ] || [ ! -f "$MODEL_DIR/gpt.pth" ] || [ ! -f "$MODEL_DIR/bigvgan_generator.pth" ]; then
         echo "Essential model files not found in $MODEL_DIR"
         return 1
+    fi
+
+    # Download marker is optional for offline volume mounts.
+    if [ ! -f "$MODEL_DIR/.download_complete" ]; then
+        echo "Warning: download marker file missing, assuming model is provided by volume"
     fi
     
     echo "Model files found in $MODEL_DIR"
@@ -53,7 +77,7 @@ check_model_exists() {
 
 # Function to check if model conversion is complete
 check_conversion_complete() {
-    if [ -f "$MODEL_DIR/.conversion_complete" ]; then
+    if [ -f "$MODEL_DIR/.conversion_complete" ] || { [ -d "$MODEL_DIR/vllm" ] && [ -f "$MODEL_DIR/vllm/model.safetensors" ]; }; then
         echo "Model conversion already completed"
         return 0
     fi
@@ -117,7 +141,7 @@ if [ "$DOWNLOAD_MODEL" = "1" ]; then
         echo "Model already exists, skipping download"
     fi
 else
-    echo "Model download disabled (DOWNLOAD_MODEL=0)"
+    echo "Model download disabled (DOWNLOAD_MODEL=$DOWNLOAD_MODEL)"
     if ! check_model_exists; then
         echo "Error: Model not found and download is disabled"
         exit 1
@@ -145,7 +169,7 @@ if [ "$CONVERT_MODEL" = "1" ]; then
         echo "Model conversion already completed, skipping"
     fi
 else
-    echo "Model conversion disabled (CONVERT_MODEL=0)"
+    echo "Model conversion disabled (CONVERT_MODEL=$CONVERT_MODEL)"
 fi
 
 # Start the API server
@@ -163,7 +187,7 @@ if [[ "$IS_FP16" == "1" ]]; then
     CMD+=(--is_fp16)
 fi
 
-if [[ "$DISABLE_QWEN_EMO" == "1" ]]; then
+if [[ "$ENABLE_QWEN_EMO_EFFECTIVE" == "2" ]]; then
     CMD+=(--disable_qwen_emo)
 fi
 
