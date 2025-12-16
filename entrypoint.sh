@@ -1,3 +1,4 @@
+
 #!/bin/bash
 
 #need to set alias within container
@@ -61,8 +62,32 @@ check_model_exists() {
     fi
 
     # Check for essential model files
-    if [ ! -f "$MODEL_DIR/config.yaml" ] || [ ! -f "$MODEL_DIR/gpt.pth" ] || [ ! -f "$MODEL_DIR/bigvgan_generator.pth" ]; then
+    if [ ! -f "$MODEL_DIR/config.yaml" ] || [ ! -f "$MODEL_DIR/gpt.pth" ]; then
         echo "Essential model files not found in $MODEL_DIR"
+        return 1
+    fi
+
+    # BigVGAN weights may exist in different filenames/locations depending on download source.
+    BIGVGAN_OK=2
+    for f in \
+        "$MODEL_DIR/bigvgan_generator.pth" \
+        "$MODEL_DIR/bigvgan_generator.pt" \
+        "$MODEL_DIR/bigvgan/bigvgan_generator.pth" \
+        "$MODEL_DIR/bigvgan/bigvgan_generator.pt" \
+        "$MODEL_DIR/bigvgan/generator.pth" \
+        "$MODEL_DIR/bigvgan/generator.pt"; do
+        if [ -f "$f" ]; then
+            BIGVGAN_OK=1
+            break
+        fi
+    done
+
+    if [ "$BIGVGAN_OK" != "1" ]; then
+        echo "Essential BigVGAN weight file not found in $MODEL_DIR"
+        if [ -d "$MODEL_DIR/bigvgan" ]; then
+            echo "Contents of $MODEL_DIR/bigvgan:"
+            ls -lah "$MODEL_DIR/bigvgan" || true
+        fi
         return 1
     fi
 
@@ -196,3 +221,4 @@ if [[ "$VERBOSE" == "1" ]]; then
 fi
 
 exec "${CMD[@]}"
+
