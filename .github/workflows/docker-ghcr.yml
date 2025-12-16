@@ -38,6 +38,13 @@ jobs:
           df -h
           docker system df || true
 
+      - name: Prune Docker data (pre-build)
+        run: |
+          docker system prune -af --volumes || true
+          docker builder prune -af || true
+          df -h
+          docker system df || true
+
       - name: Set image name (lowercase)
         run: echo "IMAGE_NAME=${GITHUB_REPOSITORY,,}" >> $GITHUB_ENV
 
@@ -72,6 +79,4 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=min
           provenance: false
