@@ -1,0 +1,107 @@
+name: Cleanup and Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ master ]
+    paths:
+      - 'Dockerfile'
+      - 'requirements.txt'
+      - '.github/workflows/cleanup_and_build.yml'
+
+jobs:
+  cleanup-and-build:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Free disk space (Basic)
+        uses: jlumbroso/free-disk-space@v1.3.1
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
+
+      - name: Show initial disk usage
+        run: |
+          echo "=== Initial Disk Usage ==="
+          df -h
+          echo "=== Docker Disk Usage ==="
+          docker system df || true
+
+      - name: Clean up system (Intensive)
+        if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/master'
+        run: |
+          echo "=== Starting intensive cleanup ==="
+          
+          # Remove unnecessary packages
+          echo "Removing unnecessary packages..."
+          sudo apt-get remove -y --purge \
+            microsoft-edge-stable \
+            azure-cli \
+            google-cloud-cli \
+            google-chrome-stable \
+            firefox \
+            powershell \
+            kubectl \
+            snapd \
+            'temurin-*-jdk' \
+            'llvm-*-dev' \
+            'openjdk-*-jre-headless' \
+            'openjdk-*-jdk-headless' 2>/dev/null || true
+          
+          sudo apt-get autoremove -y 2>/dev/null || true
+          
+          # Clean up Docker
+          echo "Cleaning up Docker..."
+          sudo docker system prune -af --volumes || true
+          sudo docker builder prune -af || true
+          
+          # Clean up apt cache
+          echo "Cleaning up apt cache..."
+          sudo apt-get clean
+          
+          echo "=== Cleanup complete ==="
+          df -h
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=branch
+            type=ref,event=tag
+            type=sha,format=short
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # 使用最小化缓存，避免占用过多磁盘
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: false
+          # 限制并发构建，减少内存和磁盘压力
+          cpus: 2
+          memory: 4GB
