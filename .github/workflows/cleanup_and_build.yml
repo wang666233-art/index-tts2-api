@@ -2,16 +2,13 @@ name: Cleanup and Build
 
 on:
   workflow_dispatch:
-  push:
-    branches: [ master ]
-    paths:
-      - 'Dockerfile'
-      - 'requirements.txt'
-      - '.github/workflows/cleanup_and_build.yml'
 
 jobs:
   cleanup-and-build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     
     steps:
       - name: Checkout code
