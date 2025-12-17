@@ -10,7 +10,7 @@ ninja>=1.13.0
 modelscope>=1.31.0
 munch==4.0.0
 loguru>=0.7.3
-flash-attn>=2.8.3
+flash-attn>=2.8.3; platform_system == "Linux" and platform_machine == "x86_64" and python_version < "3.12"
 
 # FastAPI dependencies
 fastapi>=0.120.0
