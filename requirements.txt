@@ -2,27 +2,25 @@
 vllm==0.10.2
 descript-audiotools==0.7.2
 matplotlib==3.8.2
-omegaconf
-sentencepiece
-librosa
-gradio
-ninja
-modelscope
+omegaconf>=2.3.0
+sentencepiece>=0.2.1
+librosa>=0.11.0
+gradio>=5.49.1
+ninja>=1.13.0
+modelscope>=1.31.0
 munch==4.0.0
-loguru
-protobuf>=3.19.0,<3.20.0  # upper-bound to satisfy descript-audiotools
+loguru>=0.7.3
+flash-attn>=2.8.3
 
 # FastAPI dependencies
-fastapi
-uvicorn[standard]
-python-multipart
+fastapi>=0.120.0
+uvicorn>=0.38.0
 
 # Audio processing
-soundfile
 
 # Platform-specific text processing
-WeTextProcessing; platform_machine != "Darwin"
-wetext; platform_system == "Darwin"
+WeTextProcessing>=1.0.4; platform_system != "Darwin"
+wetext>=1.0.4; platform_system == "Darwin"
 
 # CUDA support (use torch with CUDA)
 # Install with: pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
