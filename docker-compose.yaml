@@ -1,24 +1,22 @@
 services:
   index-tts:
-    build: .
-    image: index-tts-server
+    image: ${IMAGE:-crpi-1ox9stng93ipbprt.cn-beijing.personal.cr.aliyuncs.com/wang666233/wang666233:latest}
+    pull_policy: if_not_present
     environment:
-      - MODEL=${MODEL:-kusuriuri/IndexTTS-2-vLLM}
-      - VLLM_USE_MODELSCOPE=${VLLM_USE_MODELSCOPE:-1}
       - DOWNLOAD_MODEL=${DOWNLOAD_MODEL:-2}
       - CONVERT_MODEL=${CONVERT_MODEL:-2}
-      - MODEL_DIR=${MODEL_DIR:-checkpoints/IndexTTS-2-vLLM}
+      - MODEL_DIR=${MODEL_DIR:-/app/checkpoints/IndexTTS-2-vLLM}
       - HOST=${HOST:-0.0.0.0}
       - PORT=${PORT:-8001}
-      - IS_FP16=${IS_FP16:-0}
-      - ENABLE_QWEN_EMO=${ENABLE_QWEN_EMO:-}
+      - IS_FP16=${IS_FP16:-1}
+      - ENABLE_QWEN_EMO=${ENABLE_QWEN_EMO:-1}
       - DISABLE_QWEN_EMO=${DISABLE_QWEN_EMO:-0}
       - VERBOSE=${VERBOSE:-0}
       - GPU_MEMORY_UTILIZATION=${GPU_MEMORY_UTILIZATION:-0.25}
       - QWENEMO_GPU_MEMORY_UTILIZATION=${QWENEMO_GPU_MEMORY_UTILIZATION:-0.10}
     container_name: index-tts-server
     ports:
-      - "${HOST_PORT:-8001}:${PORT:-8001}"
+      - "${HOST_PORT:-6006}:${PORT:-8001}"
     deploy:
       resources:
         reservations:
@@ -29,7 +27,7 @@ services:
     volumes:
     #   - ./audio_prompts:/app/audio_prompts
       - ./assets:/app/assets
-      - ./checkpoints:/app/checkpoints
+      - ${CHECKPOINTS_DIR:-./checkpoints}:/app/checkpoints:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:${PORT:-8001}/health"]

@@ -142,6 +142,7 @@ async def tts_api_upload(
     emo_weight: float = Form(1.0),
     emo_audio: Optional[UploadFile] = File(None),
     emo_text: Optional[str] = Form(None),
+    emo_vec: Optional[str] = Form(None),
     emo_random: bool = Form(False),
     max_text_tokens_per_sentence: int = Form(120)
 ):
@@ -179,13 +180,42 @@ async def tts_api_upload(
         if emo_control_method == 1:
             emo_weight = emo_weight
         if emo_control_method == 2:
-            # 注意：文件上传方式暂不支持向量控制
-            logger.warning("Vector control method not supported with file upload, switching to method 0")
-            emo_control_method = 0
-            emo_weight = 1.0
+            try:
+                vec_obj = json.loads(emo_vec) if isinstance(emo_vec, str) and emo_vec.strip() else None
+            except Exception:
+                vec_obj = None
+
+            if vec_obj is None and isinstance(emo_vec, str) and emo_vec.strip():
+                parts = [p.strip() for p in emo_vec.split(",") if p.strip()]
+                if len(parts) == 8:
+                    try:
+                        vec_obj = [float(p) for p in parts]
+                    except Exception:
+                        vec_obj = None
+
+            if not (isinstance(vec_obj, list) and len(vec_obj) == 8):
+                return JSONResponse(
+                    status_code=500,
+                    content={
+                        "status": "error",
+                        "error": "emo_vec 需要是 8 维向量（JSON list 或逗号分隔的 8 个数字）",
+                    },
+                )
+
+            vec = [float(x) for x in vec_obj]
+            vec_sum = sum(vec)
+            if vec_sum > 1.5:
+                return JSONResponse(
+                    status_code=500,
+                    content={
+                        "status": "error",
+                        "error": "情感向量之和不能超过1.5，请调整后重试。",
+                    },
+                )
             emo_ref_path = None
         else:
             emo_ref_path = emo_ref_path if emo_ref_path else None
+            vec = None
 
         # 调用TTS推理
         sr, wav = await tts.infer(
@@ -194,7 +224,7 @@ async def tts_api_upload(
             output_path=None,
             emo_audio_prompt=emo_ref_path,
             emo_alpha=emo_weight,
-            emo_vector=None,
+            emo_vector=vec,
             use_emo_text=(emo_control_method==3),
             emo_text=emo_text,
             use_random=emo_random,
