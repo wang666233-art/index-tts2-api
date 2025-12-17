@@ -1,6 +1,9 @@
 # FROM vllm/vllm-openai:latest
 FROM vllm/vllm-openai:v0.10.2
 
+ENV CC=/usr/bin/gcc \
+    CXX=/usr/bin/g++
+
 WORKDIR /app
 
 COPY requirements.txt requirements.txt
@@ -8,7 +11,8 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     curl \
     ffmpeg \
-    build-essential \
+    gcc \
+    g++ \
     libsndfile1 \
     libsm6 \
     libxext6 \
@@ -17,8 +21,6 @@ RUN apt-get update && \
     grep -v -E '^vllm(==|$)' requirements.txt > /tmp/requirements.docker.txt \
     && \
     pip install --no-cache-dir --break-system-packages -r /tmp/requirements.docker.txt \
-    && \
-    apt-get purge -y --auto-remove build-essential \
     && \
     rm -rf /root/.cache/pip /tmp/requirements.docker.txt \
     && \

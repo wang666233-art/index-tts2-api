@@ -1,4 +1,3 @@
-
 #!/bin/bash
 
 #need to set alias within container
