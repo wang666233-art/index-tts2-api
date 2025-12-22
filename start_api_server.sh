@@ -10,26 +10,32 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
+PY_CMD=(python3)
+
 echo -e "${BLUE}=================================================="
 echo -e "IndexTTS API 服务器启动脚本"
 echo -e "==================================================${NC}"
 
 # 检查 uv 是否安装
 if ! command -v uv &> /dev/null; then
-    echo -e "${RED}错误: uv 未安装${NC}"
-    echo -e "${YELLOW}请安装 uv: curl -LsSf https://astral.sh/uv/install.sh | sh${NC}"
-    exit 1
+    echo -e "${YELLOW}警告: uv 未安装，将直接使用 python3 启动（不会自动创建/使用 uv 环境）${NC}"
+else
+    PY_CMD=(uv run python)
 fi
 
 # 检查依赖
 echo -e "${YELLOW}检查依赖...${NC}"
-uv run python -c "import torch, vllm, fastapi" 2>/dev/null || {
-    echo -e "${RED}错误: 依赖未安装,请先运行: uv sync${NC}"
+"${PY_CMD[@]}" -c "import torch, vllm, fastapi" 2>/dev/null || {
+    if command -v uv &> /dev/null; then
+        echo -e "${RED}错误: 依赖未安装,请先运行: uv sync${NC}"
+    else
+        echo -e "${RED}错误: 依赖未安装,请先运行: pip install -r requirements.txt${NC}"
+    fi
     exit 1
 }
 
 # 检查CUDA
-uv run python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}')" 2>/dev/null
+"${PY_CMD[@]}" -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}')" 2>/dev/null
 
 # 配置 CUDA 扩展编译所需的编译器 (GCC <= 12)
 if [[ -z "${CC:-}" || -z "${CXX:-}" || -z "${CUDAHOSTCXX:-}" ]]; then
@@ -119,7 +125,7 @@ echo -e "启动 IndexTTS API 服务器..."
 echo -e "==================================================${NC}"
 
 # 启动API服务器
-exec uv run python api_server_v2.py \
+exec "${PY_CMD[@]}" api_server_v2.py \
     --host "$HOST" \
     --port "$PORT" \
     --model_dir "$MODEL_DIR" \
