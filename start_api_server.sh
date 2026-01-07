@@ -10,11 +10,33 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-PY_CMD=(python3)
-
 echo -e "${BLUE}=================================================="
 echo -e "IndexTTS API 服务器启动脚本"
 echo -e "==================================================${NC}"
+
+# 1. 加载 .env 文件 (如果存在)
+if [ -f .env ]; then
+    echo -e "${GREEN}检测到 .env 文件，正在加载配置...${NC}"
+    # 导出 .env 中的所有变量
+    set -a
+    source .env
+    set +a
+else
+    echo -e "${YELLOW}未检测到 .env 文件，将使用系统环境变量或默认值。${NC}"
+fi
+
+# 2. 设置默认值 (如果环境变量中没有)
+HOST=${HOST:-"0.0.0.0"}
+PORT=${PORT:-6006}
+MODEL_DIR=${MODEL_DIR:-"checkpoints/IndexTTS-2-vLLM"}
+GPU_MEMORY_UTILIZATION=${GPU_MEMORY_UTILIZATION:-"0.25"}
+QWENEMO_GPU_MEMORY_UTILIZATION=${QWENEMO_GPU_MEMORY_UTILIZATION:-"0.10"}
+IS_FP16=${IS_FP16:-"0"}
+ENABLE_QWEN_EMO=${ENABLE_QWEN_EMO:-"1"}
+VERBOSE=${VERBOSE:-"0"}
+
+# Python 启动命令
+PY_CMD=(python3)
 
 # 检查 uv 是否安装
 if ! command -v uv &> /dev/null; then
@@ -51,84 +73,43 @@ else
     echo -e "${GREEN}检测到用户自定义编译器设置 (CC/CXX/CUDAHOSTCXX)，跳过自动配置。${NC}"
 fi
 
-# 默认参数
-HOST=${HOST:-"0.0.0.0"}
-PORT=${PORT:-6006}
-MODEL_DIR=${MODEL_DIR:-"checkpoints/IndexTTS-2-vLLM"}
+# 构造 Python 脚本参数
+PY_ARGS=("--host" "$HOST" "--port" "$PORT" "--model_dir" "$MODEL_DIR" "--gpu_memory_utilization" "$GPU_MEMORY_UTILIZATION" "--qwenemo_gpu_memory_utilization" "$QWENEMO_GPU_MEMORY_UTILIZATION")
 
-# 解析命令行参数
-USE_FP16=""
-DISABLE_QWEN_EMO=""
-VERBOSE=""
+if [[ "$IS_FP16" == "1" ]]; then
+    PY_ARGS+=("--is_fp16")
+    FP16_STATUS="启用"
+else
+    FP16_STATUS="禁用"
+fi
 
-while [[ $# -gt 0 ]]; do
-    case $1 in
-        --host)
-            HOST="$2"
-            shift 2
-            ;;
-        --port)
-            PORT="$2"
-            shift 2
-            ;;
-        --model-dir)
-            MODEL_DIR="$2"
-            shift 2
-            ;;
-        --is_fp16)
-            USE_FP16="--is_fp16"
-            shift
-            ;;
-        --disable_qwen_emo)
-            DISABLE_QWEN_EMO="--disable_qwen_emo"
-            shift
-            ;;
-        --verbose)
-            VERBOSE="--verbose"
-            shift
-            ;;
-        --help)
-            echo "用法: $0 [选项]"
-            echo ""
-            echo "选项:"
-            echo "  --host HOST           绑定地址 (默认: 0.0.0.0)"
-            echo "  --port PORT           端口 (默认: 6006)"
-            echo "  --model-dir DIR       模型目录 (默认: checkpoints/IndexTTS-2-vLLM)"
-            echo "  --is_fp16            使用FP16精度"
-            echo "  --disable_qwen_emo    禁用Qwen情感模型"
-            echo "  --verbose            详细输出"
-            echo "  --help               显示帮助信息"
-            echo ""
-            echo "示例:"
-            echo "  $0 --is_fp16 --disable_qwen_emo"
-            echo "  $0 --host 0.0.0.0 --port 6006 --is_fp16"
-            exit 0
-            ;;
-        *)
-            echo -e "${RED}未知参数: $1${NC}"
-            echo "使用 --help 查看帮助信息"
-            exit 1
-            ;;
-    esac
-done
+if [[ "$ENABLE_QWEN_EMO" != "1" ]]; then
+    PY_ARGS+=("--disable_qwen_emo")
+    QWEN_EMO_STATUS="禁用"
+else
+    QWEN_EMO_STATUS="启用"
+fi
 
-echo -e "${GREEN}启动配置:${NC}"
+if [[ "$VERBOSE" == "1" ]]; then
+    PY_ARGS+=("--verbose")
+    VERBOSE_STATUS="启用"
+else
+    VERBOSE_STATUS="禁用"
+fi
+
+echo -e "${GREEN}当前加载配置:${NC}"
 echo -e "  主机: ${HOST}"
 echo -e "  端口: ${PORT}"
 echo -e "  模型目录: ${MODEL_DIR}"
-echo -e "  FP16: ${USE_FP16:-"未启用"}"
-echo -e "  禁用Qwen情感: ${DISABLE_QWEN_EMO:-"未禁用"}"
-echo -e "  详细输出: ${VERBOSE:-"未启用"}"
+echo -e "  FP16: ${FP16_STATUS}"
+echo -e "  GPU内存占用率: ${GPU_MEMORY_UTILIZATION}"
+echo -e "  Qwen情感GPU内存占用率: ${QWENEMO_GPU_MEMORY_UTILIZATION}"
+echo -e "  Qwen情感模型: ${QWEN_EMO_STATUS}"
+echo -e "  详细输出: ${VERBOSE_STATUS}"
 
 echo -e "${BLUE}=================================================="
-echo -e "启动 IndexTTS API 服务器..."
+echo -e "正在启动 IndexTTS API 服务器..."
 echo -e "==================================================${NC}"
 
 # 启动API服务器
-exec "${PY_CMD[@]}" api_server_v2.py \
-    --host "$HOST" \
-    --port "$PORT" \
-    --model_dir "$MODEL_DIR" \
-    $USE_FP16 \
-    $DISABLE_QWEN_EMO \
-    $VERBOSE
+exec "${PY_CMD[@]}" api_server_v2.py "${PY_ARGS[@]}"
