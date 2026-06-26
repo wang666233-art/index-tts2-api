@@ -1,11 +1,13 @@
 services:
   index-tts:
-    image: ${IMAGE:-crpi-1ox9stng93ipbprt.cn-beijing.personal.cr.aliyuncs.com/wang666233/wang666233:latest}
+    image: ${IMAGE:-nianhuasishui/index-tts2-api:latest}
     pull_policy: if_not_present
     environment:
-      - DOWNLOAD_MODEL=${DOWNLOAD_MODEL:-2}
+      - DOWNLOAD_MODEL=${DOWNLOAD_MODEL:-1}
       - CONVERT_MODEL=${CONVERT_MODEL:-2}
       - MODEL_DIR=${MODEL_DIR:-/app/checkpoints/IndexTTS-2-vLLM}
+      - MODEL=${MODEL:-ksuriuri/IndexTTS-2-vLLM}
+      - VLLM_USE_MODELSCOPE=${VLLM_USE_MODELSCOPE:-0}
       - HOST=${HOST:-0.0.0.0}
       - PORT=${PORT:-8001}
       - IS_FP16=${IS_FP16:-1}

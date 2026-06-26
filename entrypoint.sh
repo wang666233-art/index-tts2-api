@@ -3,11 +3,11 @@
 #need to set alias within container
 alias python=python3
 # Set default values if environment variables are not set
-MODEL_DIR=${MODEL_DIR:-"checkpoints/"}
-MODEL=${MODEL:-"IndexTeam/IndexTTS-1.5"}
-VLLM_USE_MODELSCOPE=${VLLM_USE_MODELSCOPE:-1}
+MODEL_DIR=${MODEL_DIR:-"checkpoints/IndexTTS-2-vLLM"}
+MODEL=${MODEL:-"ksuriuri/IndexTTS-2-vLLM"}
+VLLM_USE_MODELSCOPE=${VLLM_USE_MODELSCOPE:-0}
 DOWNLOAD_MODEL=${DOWNLOAD_MODEL:-1}
-CONVERT_MODEL=${CONVERT_MODEL:-1}
+CONVERT_MODEL=${CONVERT_MODEL:-2}
 HOST=${HOST:-"0.0.0.0"}
 PORT=${PORT:-8001}
 IS_FP16=${IS_FP16:-2}
@@ -220,4 +220,3 @@ if [[ "$VERBOSE" == "1" ]]; then
 fi
 
 exec "${CMD[@]}"
-
